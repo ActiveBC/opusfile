@@ -78,8 +78,110 @@ int opus_head_parse(OpusHead *_head,const unsigned char *_data,size_t _len){
     }
     if(_head!=NULL)memcpy(_head->mapping,_data+21,head.channel_count);
   }
+  /*Ambisonics channel mapping*/
+  else if(head.mapping_family==2)
+  {
+    size_t size;
+    int ci;
+    if (head.channel_count < 1 || head.channel_count > OP_NCHANNELS_MAX)
+      return OP_EBADHEADER;
+    size = 21 + head.channel_count;
+    if (_len < size || head.version <= 1 && _len > size)
+      return OP_EBADHEADER;
+    head.stream_count = _data[19];
+    if (head.stream_count < 1)
+      return OP_EBADHEADER;
+    head.coupled_count = _data[20];
+    if (head.coupled_count > head.stream_count)
+      return OP_EBADHEADER;
+    for (ci = 0; ci < head.channel_count; ci++)
+    {
+      if (_data[21 + ci] >= head.stream_count + head.coupled_count &&
+          _data[21 + ci] != 255)
+      {
+        return OP_EBADHEADER;
+      }
+    }
+    if (_head != NULL)
+      memcpy(_head->mapping, _data + 21, head.channel_count);
+  }
+  else if(head.mapping_family==3)
+  {
+    /*Use channel mapping 3 for orders {1, 2, 3} with 4 to 18 channels
+      (including the non-diegetic stereo track). For other orders with no
+      demixing matrices currently available, use channel mapping 2.*/
+    size_t size;
+    int ci;
+    int i, k, s;
+    fprintf(stderr, "Mapping family  3 not actually implemented!\n");
+    if (head.channel_count < 1 || head.channel_count > OP_NCHANNELS_MAX)
+      return OP_EBADHEADER;
+
+    head.stream_count = _data[19];
+    if (head.stream_count < 1)
+      return OP_EBADHEADER;
+
+    head.coupled_count = _data[20];
+    if (head.coupled_count > head.stream_count)
+      return OP_EBADHEADER;
+
+    fprintf(stderr, "streams %d, coupled %d \n", head.stream_count, head.coupled_count);
+
+    size = 21 + (head.channel_count * (head.stream_count+head.coupled_count)*2);
+
+    if (_len < size || head.version <= 1 && _len > size)
+      return OP_EBADHEADER;
+
+
+    for (i = 0; i < head.stream_count+head.coupled_count; i++)
+    {
+      for (ci = 0; ci < head.channel_count; ci++)
+      {
+      /*if (_data[21 + j] >= (head.stream_count+head.coupled_count)*2 &&
+          _data[21 + j] != 255)
+      {
+        return OP_EBADHEADER;
+      }*/
+
+      k=ci*(head.stream_count+head.coupled_count)+i;
+      s = _data[21 + 2*k + 1] << 8 | _data[21 + 2*k];
+      s = ((s & 0xFFFF) ^ 0x8000) - 0x8000;
+      /* fprintf(stderr, "%s%6d%s",ci==0?"\t[":", ",s,ci==head.channel_count-1?"]\n":""); */
+
+      _head->dmatrix[k] = s;
+      }
+    }
+    if (_head != NULL)
+      memcpy(_head->mapping, _data + 21, head.channel_count);
+  }
   /*General purpose players should not attempt to play back content with
      channel mapping family 255.*/
+  else if(head.mapping_family==255)
+  {
+    size_t size;
+    int ci;
+    if (head.channel_count < 1 || head.channel_count > OP_NCHANNELS_MAX)
+      return OP_EBADHEADER;
+    size = 21 + head.channel_count;
+    if (_len < size || head.version <= 1 && _len > size)
+      return OP_EBADHEADER;
+    head.stream_count = _data[19];
+    if (head.stream_count < 1)
+      return OP_EBADHEADER;
+    head.coupled_count = _data[20];
+    if (head.coupled_count > head.stream_count)
+      return OP_EBADHEADER;
+    for (ci = 0; ci < head.channel_count; ci++)
+    {
+      if (_data[21 + ci] >= head.stream_count + head.coupled_count &&
+          _data[21 + ci] != 255)
+      {
+        return OP_EBADHEADER;
+      }
+    }
+    if (_head != NULL)
+      memcpy(_head->mapping, _data + 21, head.channel_count);
+  }
   else if(head.mapping_family==255)return OP_EIMPL;
   /*No other channel mapping families are currently defined.*/
   else return OP_EBADHEADER;
